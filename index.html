@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.5/purify.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bio.ai - prototipo v1</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body {
+      width:100vw; height:100vh;
+      background: linear-gradient(180deg, #292929 0%, #000 100%);
+      overflow:hidden;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #container {
+      position:relative;
+      width:200px; height:200px;
+      transform-origin:center center;
+      transform: scale(0.7);
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+    #container:not(.active):hover {
+      transform: scale(0.8);
+    }
+    .circle {
+      position:absolute; 
+      top:0; left:0;
+      width:100%; 
+      height:100%;
+      border-radius:50%; 
+      overflow:hidden;
+      --angle: 0deg;
+      background: linear-gradient(var(--angle), #555 0%, #333 100%);
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .circle:not(.active):hover {
+        background: linear-gradient(var(--angle), #00ab39 0%, #80ffaa 100%);
+    }
+    #container.active .circle {
+      background: linear-gradient(var(--angle), #00ab39 0%, #80ffaa 100%);
+    }
+    #bio-clone {
+      filter: blur(0);
+      opacity: 0;
+      transition: opacity 0.5s, filter 0.5s;
+    }
+    #container.active #bio-clone {
+      filter: blur(100px);
+      opacity: 0.6;
+    }
+    #transcript, #response {
+      position: absolute;
+      width: 80%;
+      max-width: 600px;
+      color: white;
+      font-family: "Russo One", sans-serif;
+      text-align: center;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #response {
+      position: fixed;
+      bottom: 20px;
+      max-height: 200px;
+      min-height: 100px;
+      background-color: rgba(59, 57, 57, 0.5);
+      font-size: 12px;
+      border-radius: 8px;
+      padding: 2%;
+      border: 1px solid rgba(102, 100, 100, 0.5);
+      opacity: 0.7;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      overflow: hidden;
+      pointer-events: auto;
+    }
+    #fade-out-response {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(to top, rgba(0, 0, 0, 1) 10%, rgba(0, 0, 0, 0) 70%);
+      z-index: 10;
+      transition: opacity .6s ease-in-out;
+    }
+    
+    #response-text {
+      flex: 1;
+      overflow-y: auto;
+      position: relative;
+      padding-right: 50px;
+      text-align: left;
+      transition: all 0.6s ease-in-out;
+    }
+    #response-text::-webkit-scrollbar {
+      display: none;
+    }  
+    .button {
+      position: absolute;
+      top: 50%;  
+      right: 10px;
+      transform: translateY(-50%);
+      width: 50px;
+      height: 50px;
+      background: rgba(68, 68, 68, 0.418);
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      pointer-events: auto;
+      margin-left: 8px;
+      z-index: 11;
+    }
+    .button:hover {
+      background: rgba(117, 117, 117, 0.418);
+    }
+    .button svg {
+      width: 16px;
+      height: 16px;
+      fill: white;
+    }
+
+    #response-text strong {
+      color: #80ffaa;
+      font-weight: normal;
+    }
+
+    #response-text em {
+      color: #00ab39;
+      font-style: normal;
+    }
+
+    #response-text code {
+      background: rgba(255,255,255,0.1);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+
+    #response.expanded {
+      font-size: 16px;
+      border-radius: 0 !important;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    #response.expanded #response-text {
+      text-align: left;
+      padding-right: 40px;
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+      margin: 0 auto;
+      display: block;
+      transform: none !important;
+      padding-top: 5%;
+    }
+
+    #transcript {
+      /* Altere estas propriedades */
+      top: 10px; /* Move para o centro vertical */
+    
+    
+      font-size: 14px;
+      opacity: 0.9;
+      background: rgba(59, 57, 57, 0.7);  
+      border: 1px solid rgba(102, 100, 100, 0.3);
+      border-radius: 8px;
+      padding: 12px 20px;
+      backdrop-filter: blur(2px);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: none;
+      width: fit-content;
+      min-width: 120px;
+      max-width: 600px;
+      white-space: nowrap;
+      overflow: hidden;
+      z-index: 999;
+    }
+
+    #transcript:not(:empty) {
+      display: block;
+    }
+
+    .alert {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(59, 57, 57, 0.9);
+      border: 1px solid rgba(102, 100, 100, 0.5);
+      border-radius: 8px;
+      padding: 12px 20px;
+      color: white;
+      font-family: "Russo One", sans-serif;
+      font-size: 12px;
+      z-index: 1000;
+      backdrop-filter: blur(2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      max-width: 300px;
+      transition: all 0.3s ease;
+      animation: alertEntry 0.3s ease-out;
+    }
+
+    #transcript:not(:empty) ~ .alert {
+      top: 80px;
+    }
+
+    @keyframes alertExit {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+    }
+
+    @keyframes alertEntry {
+      from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    #status {
+      position: fixed;
+      bottom: calc(20px + 100px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(59, 57, 57, 0.9);
+      border: 1px solid rgba(102, 100, 100, 0.5);
+      border-radius: 8px;
+      padding: 12px 20px;
+      color: #80ffaa;
+      font-family: "Russo One", sans-serif;
+      font-size: 12px;
+      z-index: 999;
+      text-align: center;
+      backdrop-filter: blur(2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: all 0.3s ease;
+      max-width: 300px;
+      width: 90%;
+    }
+
+    @media screen and (max-width: 600px) {
+      .alert {
+        width: 90%;
+        max-width: 280px;
+        font-size: 11px;
+        padding: 10px 15px;
+      }
+
+      #transcript:not(:empty) ~ .alert {
+        top: 80px;
+      }
+
+      #status {
+        bottom: calc(20px + 120px);
+        font-size: 10px;
+        padding: 8px 12px;
+      }
+
+      #response {
+        max-height: 150px;
+        min-height: 80px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- O restante do corpo permanece igual -->
+  <div id="container">
+    <div id="bio-clone" class="circle"></div>
+    <div id="bio" class="circle"></div>
+  </div>
+
+  <div id="transcript"></div>
+  <div id="response">
+    <div id="response-text"></div>
+    <button id="expand-btn" class="button" title="Expandir resposta">
+      <img src="https://www.svgrepo.com/show/17866/full-screen.svg"
+           style="width: 20px; height: 20px; filter: invert(100%) sepia(3%) saturate(14%) hue-rotate(68deg) brightness(104%) contrast(104%);">
+    </button>
+    <div id="fade-out-response"></div>
+  </div>
+
+  <div id="status"></div>
+
+<script>
+  (async function(){
+    function showAlert(message, duration = 3000) {
+      const a = document.createElement('div');
+      a.className = 'alert';
+      a.textContent = message;
+      document.body.appendChild(a);
+      
+      // Novo código para animação de saída
+      setTimeout(() => {
+        a.style.animation = 'alertExit 0.3s ease-out forwards';
+        a.addEventListener('animationend', () => a.remove());
+      }, duration - 300); // Começa a animação antes do timeout terminar
+    }
+    
+    function showStatus(text, duration = 2000) {
+      const s = document.getElementById('status');
+      const response = document.getElementById('response');
+      s.textContent = text;
+      s.style.opacity = '1';
+      
+      // Atualiza a posição vertical
+      const responseHeight = response.offsetHeight;
+      s.style.bottom = `${40 + responseHeight}px`;
+      
+      setTimeout(() => s.style.opacity = '0', duration);
+    }
+
+    // Adicione um listener para redimensionamento da resposta
+    const responseObserver = new ResizeObserver(() => {
+      const s = document.getElementById('status');
+      if(s.style.opacity === '1') {
+        const responseHeight = document.getElementById('response').offsetHeight;
+        s.style.bottom = `${40 + responseHeight}px`;
+      }
+    });
+    responseObserver.observe(document.getElementById('response'));
+
+    function devLog(...args) { console.log('[DEV]', new Date().toISOString(), ...args); }
+
+    const container = document.getElementById('container');
+    let silenceTimer;
+    let ctx, analyser, data, recognition;
+    let isActive = false, isGenerating = false;
+    let finalTranscript = '', conversationHistory = [];
+
+    const responseTextEl = document.getElementById('response-text');
+    const responseEl = document.getElementById('response');
+    const expandBtn = document.getElementById('expand-btn');
+    const fadeOutEl = document.getElementById("fade-out-response");
+
+    const GEMINI_API_KEY = 'AIzaSyB4uUqTjMA243YP1TlXaXoJKugVRTk5ZCA';
+    const GEMINI_MODEL   = 'gemini-2.0-flash';
+
+    async function sendToGeminiStream(text) {
+      try {
+        conversationHistory.push({ role: 'user', parts: [{ text }] });
+        showStatus('Processando...', 1000);
+        showAlert('Enviando para IA...');
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?key=${GEMINI_API_KEY}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ contents: conversationHistory })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '', responseText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const match = buffer.match(/\{[\s\S]*\}/);
+          if (match) {
+            try {
+              const json = JSON.parse(match[0]);
+              const part = json.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (part) {
+                responseText += part;
+                responseTextEl.innerHTML = formatResponseText(responseText);
+                showStatus('Recebendo dados...', 500);
+              }
+            } catch (e) {
+              console.warn('JSON inválido, aguardando mais dados...');
+            }
+            buffer = buffer.slice(buffer.indexOf(match[0]) + match[0].length);
+          }
+        }
+
+        showAlert('Resposta recebida!');
+        conversationHistory.push({ role: 'model', parts: [{ text: responseText }] });
+        return responseText;
+      } catch (e) {
+        showAlert('Falha na conexão com a IA');
+        throw e; // Propagar o erro para handleFinalTranscript
+      }
+    }
+
+    async function handleFinalTranscript() {
+      if (!finalTranscript.trim() || isGenerating) return;
+      isGenerating = true;
+      
+      try {
+        await sendToGeminiStream(finalTranscript.trim());
+      } catch (e) {
+        showAlert('Erro na IA: ' + e.message);
+      }
+      
+      // Resetar estados após conclusão
+      finalTranscript = '';
+      document.getElementById('transcript').innerHTML = '';
+      isGenerating = false;
+      
+      await stopRecording();
+    }
+
+
+    async function stopRecording() {
+      if (!isActive) return;
+      
+      // Parar gravação primeiro
+      if (recognition) {
+        recognition.stop();
+        recognition = null;
+      }
+      
+      // Fechar contexto de áudio
+      if (ctx) {
+        await ctx.close();
+        ctx = null;
+      }
+      
+      // Resetar UI
+      container.classList.remove('active');
+      isActive = false;
+      container.style.transform = 'scale(1)';
+    }
+
+    function startSpeechRecognition() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { showAlert('Navegador não suporta reconhecimento de voz!'); return; }
+      recognition = new SR();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = e => {
+        let interim = '';
+        let hasContent = false;
+
+        clearTimeout(silenceTimer); 
+        
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const text = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalTranscript += text.trim() + ' ';
+            hasContent = true;
+          } else {
+            interim += text;
+            hasContent = hasContent || text.trim().length > 0;
+          }
+        }
+
+        const transcriptEl = document.getElementById('transcript');
+        transcriptEl.innerHTML = finalTranscript.trim() + (interim ? '<i>' + interim + '</i>' : '');
+
+        // Animação de escala
+        if (hasContent) {
+          transcriptEl.style.transform = 'scale(1.02)';
+          setTimeout(() => transcriptEl.style.transform = 'scale(1)', 50);
+        }
+        
+        // Atualização dinâmica da largura
+        transcriptEl.style.width = 'fit-content';
+        transcriptEl.style.maxWidth = '600px';
+        transcriptEl.style.minWidth = Math.min(120 + (finalTranscript.length * 8), 600) + 'px';
+
+              silenceTimer = setTimeout(async () => {
+          if (finalTranscript.trim() && !isGenerating) {
+            await handleFinalTranscript();
+          }
+        }, 1200); // 1.2 segundos de pausa para considerar fim da fala
+      };
+      recognition.onerror = e => { showAlert('Erro no microfone!'); console.error(e); };
+      recognition.start();
+    }
+
+    function clearTranscript() {
+      const transcriptEl = document.getElementById('transcript');
+      transcriptEl.innerHTML = '';
+      transcriptEl.style.minWidth = '0';
+    }
+
+    const mapRange = (v, a, b, x, y) => (v - a)*(y - x)/(b - a) + x;
+    async function initAudio() {
+      try {
+        ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        const src = ctx.createMediaStreamSource(stream);
+        analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        src.connect(analyser);
+        data = new Uint8Array(analyser.fftSize);
+        if (ctx.state === 'suspended') await ctx.resume();
+        startUpdateLoop();
+      } catch {
+        showAlert('Acesso ao microfone negado!');
+      }
+    }
+    
+    function startUpdateLoop() {
+      let angle = 0, scale = 1, target = 1;
+      function update() {
+        if (!isActive) return;
+        analyser.getByteTimeDomainData(data);
+        let sum = 0; data.forEach(d => { const v=(d-128)/128; sum+=v*v; });
+        const rms = Math.sqrt(sum/data.length);
+        const newT = mapRange(rms*2, 0, 1, 0.7, 1.8);
+        target = newT > target ? newT : Math.max(target - 0.005, 0.7);
+        scale += (target - scale) * (scale < target ? 0.1 : 0.1);
+        container.style.transform = `scale(${scale.toFixed(3)})`;
+        angle = (angle + 0.5 + rms*6) % 360;
+        document.querySelectorAll('.circle').forEach(c => c.style.setProperty('--angle', angle+'deg'));
+        requestAnimationFrame(update);
+      }
+      update();
+    }
+
+    container.addEventListener('click', async () => {
+      if (isActive || isGenerating) return;
+      container.classList.add('active');
+      isActive = true;
+      finalTranscript = '';
+      document.getElementById('transcript').textContent = '';
+      responseTextEl.textContent = '';
+      showAlert('Gravação iniciada!');
+      clearTranscript();
+      await initAudio();
+      startSpeechRecognition();
+    });
+
+    let isExpanded = false;
+    let originalStyles = {};
+
+    expandBtn.addEventListener('click', toggleExpand);
+
+    function toggleExpand() {
+      if (!isExpanded) {
+        captureOriginalStyles();
+        expandResponse();
+      } else {
+        revertResponse();
+      }
+    }
+
+    function captureOriginalStyles() {
+      const rect = responseEl.getBoundingClientRect();
+      originalStyles = {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        maxWidth: getComputedStyle(responseEl).maxWidth, // Novo
+        maxHeight: getComputedStyle(responseEl).maxHeight, // Novo
+        fontSize: getComputedStyle(responseTextEl).fontSize,
+        fadeOpacity: getComputedStyle(fadeOutEl).opacity,
+        borderRadius: getComputedStyle(responseEl).borderRadius
+      };
+    }
+
+    function expandResponse() {
+      responseEl.style.willChange = 'transform, width, height, top, left';
+      document.body.style.overflow = 'hidden';
+
+      // Remover restrições de tamanho
+      responseEl.style.maxWidth = 'none'; // Novo
+      responseEl.style.maxHeight = 'none'; // Novo
+
+      animate({
+        duration: 600,
+        timing: easeInOut,
+        draw: progress => {
+          const eased = easeInOut(progress);
+
+          responseEl.classList.add('expanded');
+          
+          const targetTop = 0;
+          const targetLeft = 0;
+          const targetWidth = window.innerWidth;
+          const targetHeight = window.innerHeight;
+
+          responseEl.style.top = `${originalStyles.top - (originalStyles.top - targetTop) * eased}px`;
+          responseEl.style.left = `${originalStyles.left - (originalStyles.left - targetLeft) * eased}px`;
+          responseEl.style.width = `${originalStyles.width + (targetWidth - originalStyles.width) * eased}px`;
+          responseEl.style.height = `${originalStyles.height + (targetHeight - originalStyles.height) * eased}px`;
+          responseEl.style.borderRadius = `${calcBorderRadius(originalStyles.borderRadius, '0px', eased)}`;
+          
+          responseTextEl.style.fontSize = `${calcFontSize(originalStyles.fontSize, '14px', eased)}`;
+          fadeOutEl.style.opacity = `${originalStyles.fadeOpacity * (1 - eased)}`;
+        },
+        onComplete: () => {
+          isExpanded = true;
+          responseEl.style.willChange = 'auto';
+        }
+      });
+    }
+
+   function revertResponse() {
+    responseEl.style.willChange = 'transform, width, height, top, left';
+
+    // Usar valores fixos do estado expandido como ponto inicial
+    const startWidth = window.innerWidth;
+    const startHeight = window.innerHeight;
+    const startTop = 0;
+    const startLeft = 0;
+
+  animate({
+    duration: 600,
+    timing: easeInOut,
+    draw: progress => {
+      const eased = easeInOut(progress);
+      
+      // Animação direta do estado expandido para o original
+      responseEl.style.top = `${startTop + (originalStyles.top - startTop) * eased}px`;
+      responseEl.style.left = `${startLeft + (originalStyles.left - startLeft) * eased}px`;
+      responseEl.style.width = `${startWidth + (originalStyles.width - startWidth) * eased}px`;
+      responseEl.style.height = `${startHeight + (originalStyles.height - startHeight) * eased}px`;
+      
+      responseEl.style.borderRadius = `${calcBorderRadius('0px', originalStyles.borderRadius, eased)}`;
+      responseTextEl.style.fontSize = `${calcFontSize('16px', originalStyles.fontSize, eased)}`;
+      fadeOutEl.style.opacity = `${originalStyles.fadeOpacity * eased}`;
+    },
+    onComplete: () => {
+      responseEl.classList.remove('expanded');
+      responseEl.style.maxWidth = originalStyles.maxWidth;
+      responseEl.style.maxHeight = originalStyles.maxHeight;
+      responseEl.style.cssText = '';
+      document.body.style.overflow = '';
+      isExpanded = false;
+    }
+  });
+}
+
+    function calcBorderRadius(start, end, progress) {
+      const startVal = parseFloat(start);
+      const endVal = parseFloat(end);
+      return `${startVal + (endVal - startVal) * progress}px`;
+    }
+
+    function calcFontSize(start, end, progress) {
+      const startVal = parseFloat(start);
+      const endVal = parseFloat(end);
+      return `${startVal + (endVal - startVal) * progress}px`;
+    }
+
+    function easeInOut(t) {
+      return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    }
+
+    function animate({ duration, timing, draw, onComplete }) {
+      const startTime = performance.now();
+      
+      function loop(time) {
+        let progress = (time - startTime) / duration;
+        progress = Math.min(progress, 1);
+        
+        draw(timing(progress));
+        
+        if (progress < 1) {
+          requestAnimationFrame(loop);
+        } else {
+          onComplete?.();
+        }
+      }
+      requestAnimationFrame(loop);
+    }
+
+    function formatResponseText(text) {
+      // Converter markdown para HTML com segurança
+      const rawHtml = marked.parse(text, {
+        breaks: true,
+        gfm: true
+      });
+      return DOMPurify.sanitize(rawHtml);
+    }
+
+  })();
+</script>
+</body>
+</html>
